@@ -1,8 +1,95 @@
+<script>
+/* eslint-disable no-undef */
+import { computed, ref, onMounted } from 'vue'
+import { useGeolocation } from './useGeolocation'
+import { Loader } from '@googlemaps/js-api-loader'
+
+const GOOGLE_MAPS_API_KEY = 'AIzaSyAQTMFOpjhv6TLGnQRtGA0pCQ9r4W8YKjI'
+export default {
+  name: 'Locator',
+  props: {
+    center: { currPos },
+    zoom: Number,
+    mapTypeId: String
+  },
+  setup() {
+    const { coords } = useGeolocation()
+    const currPos = computed(() => ({
+      lat: coords.value.latitude,
+      lng: coords.value.longitude
+    }))
+
+    const loader = new Loader({
+      apiKey: GOOGLE_MAPS_API_KEY,
+      libraries: ['places']
+    });
+    const mapDiv = ref(null)
+    let map = ref(null)
+
+    let marker = ref(null)
+    let result_lat = ref(null)
+    let result_lng = ref(null)
+
+    //initialise Map
+    onMounted(async () => {
+      await loader.load()
+      new google.maps.Map(mapDiv.value, {
+        mapTypeId: "roadmap",
+        center: currPos.value,
+        zoom: 11
+      })
+      marker = new google.maps.Marker ({
+        position: currPos.value,
+        map: map.value,
+        draggable: true, //marker can be dragged
+        animation: google.maps.Animation.DROP
+
+      })// this supposed to show a marker when user Allow location on the page
+      google.maps.event.addListener(marker, 'dragend', function() {
+        result_lat.value = marker.value.getPosition().lat()
+        result_lng.value = marker.value.getPosition().lng()
+      })
+      //AUTOCOMPLETE
+      const userInput = document.getElementById('form-user-location');
+      const options = {
+        componentRestrictions: {country: 'SG'},
+        types: ['geocode']
+      }
+      const autocomplete = new google.maps.places.Autocomplete (userInput, options);
+      google.maps.event.addListener(autocomplete, 'place_changed', function () {
+        //obtain place
+        var place = autocomplete.getPlace();
+        console.log(place)
+
+        map.value.setCenter(place.geometry.location)
+        marker.value.setPosition(place.geometry.location)
+      })
+      result_lng.value = place.geometry.location.lat();
+      result_lng.value = place.geometry.location.lng();
+    })
+    return { currPos, mapDiv }
+  },
+  methods: {
+    locatorButtonPressed() {
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    this.lat = position.coords.latitude;
+                    this.lng = position.coords.longitude;
+                },
+                error => {
+                    console.log(error.message);
+                }
+            );
+        }
+  },
+}
+</script>
 <template>
   <br><br>
   <br><br>
   <br><br>
   <br><br>
+
   <div class="row">
     <!--Grid column-->
     <div class="col-lg-5 mb-4">
@@ -15,40 +102,13 @@
           </div>
           <p>this map is currently in progress :) </p>
           <br>
-          <div class="form-header" style="color:red;" v-show="error">
-            <h2>{{error}}</h2>
-          </div>
           <!--Body-->
-          <div class="md-form" >
-              <!--User input his/her LOCATION automatically or manually-->
-                <div class="input-group">
-                    <input
-                    type="text"
-                    id="autocomplete"
-                    class="form-control"
-                    placeholder="Enter a location"
-                    v-model="address"
-                    />
-                    <button type="button" @click="userLocationButton" class="btn btn-danger">
-                        <i class="bi bi-geo-alt-fill"></i>
-                    </button>
-                </div>
+          <div class="md-form">
+            <label for="form-user-location">Your Location</label>
+            <input type="text" id="form-user-location" class="form-control">
           </div>
-          <br><br>
-          <div class="md-form" >
-            <div class="input-group">
-                <!--User input his/her DESTINATION automatically or manually-->
-                <input
-                    type="text"
-                    id="autocomplete"
-                    class="form-control"
-                    placeholder="Your Destination"
-                    v-model="address"
-                />
-                <button type="button" class="btn btn-primary">
-                    <i class="bi bi-box-arrow-right"></i>
-                </button>
-            </div>
+          <div class="text-center mt-4">
+            <button type="button" class="btn btn-primary" @click="locatorButtonPressed" >Show my location</button>
           </div>
         </div>
       </div>
@@ -59,133 +119,8 @@
     <div class="col-lg-7">
       <!--Google map-->
       <div id="map" class="z-depth-1-half map-container-6" style="height: 400px">
-        <!--<div ref="mapDiv" style="width: 700px; height:400px"></div> -->
+        <div ref="mapDiv" style="width: 700px; height:400px"></div>
       </div>
     </div>
   </div>
 </template>
-
-<script>
-import axios from 'axios'
-export default {
-
-    data() {
-        return{
-            address: "",
-            error: ""
-        }
-    },//data
-    mounted() {
-        //call DOM, autocomplete object
-        // eslint-disable-next-line no-undef
-        let autocomplete = new google.maps.places.Autocomplete(
-            document.getElementById("autocomplete"),
-            //searches is set to SG region
-            {
-                // eslint-disable-next-line no-undef
-                bounds: new google.maps.LatLngBounds(
-                    // eslint-disable-next-line no-undef
-                    new google.maps.LatLng(1.290270, 103.851959)
-                )
-            },
-            {
-                componentRestrictions: { country: "sg" },
-            }
-
-        )
-        autocomplete.addListener("place_changed", () =>{
-            let place = autocomplete.getPlace();
-            console.log(place);
-            this.showUserLocationOnTheMap(
-                place.geometry.location.lat(),
-                place.geometry.location.lng()
-            )
-        });
-        //initMAP
-        // eslint-disable-next-line no-undef
-        new google.maps.Map(document.getElementById("map"), {
-            // I made it a global so I can use it in out events
-            zoom: 10,
-            center: { // Set to singapore
-                lat: 1.290270,
-                lng: 103.851959
-            }
-        });
-    }, //mounted
-    methods: {
-        userLocationButton() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    position => {
-                        this.getAddressFrom(
-                            position.coords.latitude,
-                            position.coords.longitude
-                        );
-                        //console.log(position.coords.latitude);
-                        //console.log(position.coords.longitude);
-                        this.showUserLocationOnTheMap(
-                            position.coords.latitude,
-                            position.coords.longitude
-                        )
-                    },
-                    // eslint-disable-next-line no-unused-vars
-                    error => {
-                        //this is use when declaring something from the data function
-                        this.error = error.message;
-                        //console.log(error.message);
-                    }
-                );
-            } else {
-                // eslint-disable-next-line no-undef
-                this.error = "Your browser does not support geolocation API ";
-                //console.log("Your browser does not support geolocation API ");
-            }
-        },
-        getAddressFrom(lat, lng) {
-            axios.get("https://maps.googleapis.com/maps/api/geocode/json?latlng="
-            + lat +
-            ","
-            + lng
-            + "&key=AIzaSyAQTMFOpjhv6TLGnQRtGA0pCQ9r4W8YKjI")
-            .then(response => {
-                if(response.data.error_message) {
-                    this.error = response.data.error_message;
-                    //console.log(response.data.error_message);
-                } else {
-                    //GEOCODING API
-                    this.address = response.data.results[0].formatted_address
-                    console.log(response.data.results[0].formatted_address);
-                }
-            })
-            .catch(error => {
-                this.error = error.message;
-                console.log(error.message);
-            });
-        },
-        showUserLocationOnTheMap(latitude, longitude) {
-            //Create the Map object
-            // eslint-disable-next-line no-undef
-            let map = new google.maps.Map(document.getElementById("map"), {
-                mapTypeId: "roadmap",
-                // eslint-disable-next-line no-undef
-                center: new google.maps.LatLng(latitude, longitude),
-                zoom: 15
-            });
-            //Add Marker to user location
-            // eslint-disable-next-line no-undef
-            new google.maps.Marker({
-                // eslint-disable-next-line no-undef
-                position: new google.maps.LatLng(latitude, longitude),
-                map: map,
-                zoom: 6
-            })
-        },
-        calculateRoute() {
-            //create request
-        }
-
-
-    }
-}//export
-
-</script>
